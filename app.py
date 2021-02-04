@@ -23,10 +23,10 @@ import numpy as np
 DB = connect(os.environ.get('DATABASE_URL') or 'sqlite:///predictions.db')
 
 class Prediction(Model):
-    observation_id = IntegerField(unique=True)
+    observation_id = TextField(unique=True)
     observation = TextField()
     outcome = BooleanField()
-    true_outcome = IntegerField(null=True)
+    true_outcome = BooleanField(null=True)
 
     class Meta:
         database = DB
