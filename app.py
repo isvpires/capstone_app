@@ -34,6 +34,8 @@ class Prediction(Model):
 
 DB.create_tables([Prediction], safe=True)
 
+
+
 # End database stuff
 ########################################
 
@@ -136,11 +138,8 @@ def check_Latitude(observation):
     
     value = observation.get("Latitude")
         
-    if not value: 
-        error = "Field `Latitude` missing"
-        return False, error
 
-    if not isinstance(value, np.float64) and not isinstance(value, float):
+    if isinstance(value, str):
         error = "Field `Latitude` is not an float or a null value. Current value: " + str(value)
         return False, error
 
@@ -157,11 +156,8 @@ def check_Longitude(observation):
     
     value = observation.get("Longitude")
         
-    if not value: 
-        error = "Field `Longitude` missing"
-        return False, error
 
-    if not isinstance(value, np.float64) and not isinstance(value, float):
+    if isinstance(value, str):
         error = "Field `Longitude`  is not an float or a null value. Current value: " + str(value)
         return False, error
 
@@ -176,12 +172,14 @@ def check_Longitude(observation):
 app = Flask(__name__)
 
 
-@app.route('/should_search', methods=['POST'])
+@app.route('/should_search/', methods=['POST'])
 def predict():
     # flask provides a deserialization convenience function called
     # get_json that will work if the mimetype is application/json
     obs_dict = request.get_json()
     observation=obs_dict
+
+
 
     columns_ok, error = check_valid_column(observation)
     if not columns_ok:
@@ -210,6 +208,10 @@ def predict():
         return jsonify(response)
 
 
+    
+
+
+
 
     # # now do what we already learned in the notebooks about how to transform
     # # a single observation into a dataframe that will work with a pipeline
@@ -218,7 +220,7 @@ def predict():
     proba = pipeline.predict_proba(obs)[0, 1]
     prediction = pipeline.predict(obs)[0]
 
-    response = {    'observation_id': _id,
+    response = {  
                     'outcome': bool(prediction)
                 }
 
@@ -229,25 +231,35 @@ def predict():
     )
     try:
         p.save()
-    except:
-        return jsonify({'outcome': bool(prediction)})
+
+    except IntegrityError:
+        error_msg = 'Observation ID: "{}" already exists'.format(_id)
+        response['error'] = error_msg
+        print(error_msg)
+        DB.rollback()
 
     return jsonify(response)
 
 
-@app.route('/search_result', methods=['POST'])
+@app.route('/search_result/', methods=['POST'])
 def update():
     obs = request.get_json()
+
+
+
     try:
         p = Prediction.get(Prediction.observation_id == obs['observation_id'])
-        p.true_outcome = obs['outcome']
+        p.true_outcome = bool(obs['outcome'])
         p.save()
+        DB.commit()
 
         values_on_db  = model_to_dict(p)
         values_on_db.pop('id')
         values_on_db.pop('observation')
 
         result = values_on_db
+        result["predicted_outcome"] = result.pop("outcome")
+        result["outcome"] = result.pop("true_outcome")
 
         return jsonify(result)
     except Prediction.DoesNotExist:
@@ -261,6 +273,12 @@ def list_db_contents():
         model_to_dict(obs) for obs in Prediction.select()
     ])
 
+
+@app.route('/list-db-requests', methods=['POST'])
+def list_db_requests():
+    return jsonify([
+        model_to_dict(obs) for obs in Requests.select()
+    ])
 
 # End webserver stuff
 ########################################
